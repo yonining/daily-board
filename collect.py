@@ -83,13 +83,49 @@ def tags_for(title, extra=""):
 
 
 # ---------------- 원티드 ----------------
+WANTED_HEADERS = {
+    "User-Agent": UA, "Accept": "application/json, text/plain, */*", "Accept-Language": "ko-KR,ko;q=0.9",
+    "Referer": "https://www.wanted.co.kr/wdlist/511?country=kr&job_sort=job.latest_order&years=-1&locations=all",
+    "Origin": "https://www.wanted.co.kr", "wanted-user-country": "KR", "wanted-user-language": "ko",
+    "Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty",
+}
+WANTED_LOG = []   # 어떤 주소로 접속했는지 (실행 기록에 남긴다)
+
+
+def wanted_get(path_and_query):
+    """원티드는 해외 서버 접속을 막을 때가 있어, 주소와 머리말을 바꿔 가며 차례로 시도한다."""
+    last = None
+    for host in ("https://www.wanted.co.kr", "https://wanted.co.kr"):
+        url = host + path_and_query
+        try:
+            req = urllib.request.Request(url, headers=WANTED_HEADERS)
+            with urllib.request.urlopen(req, timeout=20) as r:
+                WANTED_LOG.append(f"ok {url[:80]}")
+                return json.loads(r.read().decode("utf-8", "replace"))
+        except Exception as e:  # noqa: BLE001
+            last = e
+            WANTED_LOG.append(f"fail {url[:80]}: {e}")
+            time.sleep(1)
+    raise last
+
+
 def wanted():
     out = []
     loc = "&".join(f"locations={x}" for x in ("seoul.all", "gyeonggi.all", "daejeon.all"))
+    endpoints = [
+        "/api/v4/jobs?country=kr&tag_type_ids=511&{loc}&years=-1&limit=100&offset={off}&job_sort=job.latest_order",
+        "/api/chaos/navigation/v1/results?job_group_id=511&country=kr&{loc}&years=-1&limit=100&offset={off}&job_sort=job.latest_order",
+    ]
+    for ep in endpoints:
+        try:
+            wanted_get(ep.format(loc=loc, off=0))
+            break
+        except Exception:  # noqa: BLE001
+            continue
+    else:
+        raise RuntimeError("원티드 접속이 모두 막혔어요 (" + " / ".join(WANTED_LOG[-4:]) + ")")
     for off in range(0, 600, 100):
-        url = (f"https://www.wanted.co.kr/api/v4/jobs?country=kr&tag_type_ids=511&{loc}"
-               f"&years=-1&limit=100&offset={off}&job_sort=job.latest_order")
-        d = json.loads(get(url))
+        d = wanted_get(ep.format(loc=loc, off=off))
         rows = d.get("data") or []
         for j in rows:
             a_from, a_to = j.get("annual_from", 0), j.get("annual_to", 100)
@@ -229,6 +265,7 @@ def fill_posted_dates(rows, errors):
     cache_path = DATA / "posted.json"
     cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
     fails = 0
+    wanted_detail_fail = 0
     for r in rows:
         if r.get("posted"):
             continue
@@ -236,6 +273,9 @@ def fill_posted_dates(rows, errors):
             r["posted"], r["posted_kind"] = cache[r["id"]]
             continue
         found = ""
+        if r["site"] == "원티드" and wanted_detail_fail >= 3:  # 상세 페이지가 막히면 나머지는 건너뛴다
+            r["posted"], r["posted_kind"] = r["first_seen"], "확인"
+            continue
         try:
             if r["site"] == "원티드":
                 m = re.search(r'"confirm_time":"(\d{4}-\d{2}-\d{2})', get(r["url"]))
@@ -246,6 +286,8 @@ def fill_posted_dates(rows, errors):
             time.sleep(0.25)
         except Exception:  # noqa: BLE001
             fails += 1
+            if r["site"] == "원티드":
+                wanted_detail_fail += 1
         if found:
             r["posted"], r["posted_kind"] = found, "등록"
             cache[r["id"]] = [found, "등록"]
@@ -310,6 +352,7 @@ def main():
     by = {}
     for r in uniq.values():
         by[r["site"]] = by.get(r["site"], 0) + 1
+    print("원티드 접속 기록:", WANTED_LOG[:4])
     print(json.dumps({"date": today, "total": len(uniq), "by_site": by,
                       "new": sum(r["is_new"] for r in uniq.values()), "errors": errors}, ensure_ascii=False))
 
