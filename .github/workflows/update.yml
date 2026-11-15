@@ -1,0 +1,57 @@
+name: 공고 갱신
+
+on:
+  schedule:
+    - cron: "0 21 * * *"   # 매일 오전 6시 (한국 시간)
+    - cron: "0 8 * * *"    # 매일 오후 5시 (한국 시간)
+  workflow_dispatch:        # 버튼으로 바로 실행
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      TZ: Asia/Seoul
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 공고 모으기
+        run: |
+          python3 -I collect.py
+          python3 -I rank.py > /dev/null
+          python3 -I build_pages.py
+
+      - name: 새 공고 기록 저장
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/seen.json data/posted.json
+          git diff --cached --quiet || git commit -m "기록 갱신"
+          git push
+
+      - name: 페이지 준비
+        run: |
+          mkdir -p site
+          cp index.html site/index.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
