@@ -175,6 +175,7 @@ TEMPLATE = """<title>디자이너 공고 브리핑</title>
   --a: #8AA4FF; --a-soft: #1F2A4A; --b: #5CCFB2; --b-soft: #163A33;
   --hi: #5CCFB2; --mid: #E6C463; --mid-soft: #3A3218; --low: #9AA5B5; --low-soft: #242C38;
   --new: #FB923C; --warn-bg: #3A2A14; --wt: #8AA4FF; --sr: #8AB4FF; --jk: #5CCBFF; --ic: #FB923C; color-scheme: dark; }}
+[hidden] {{ display: none !important; }}
 body {{ margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.6; }}
 .wrap {{ max-width: 760px; margin: 0 auto; padding-block: 28px 64px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
