@@ -136,7 +136,7 @@ def main():
     err_block = f'<div class="warn"><strong>오늘 일부를 가져오지 못했어요.</strong><ul>{errs}</ul></div>' if errs else ""
     site_stats = " · ".join(
         f'{s} {by_site.get(s, 0)}개'
-        for s in ("원티드", "사람인", "잡코리아", "임팩트커리어"))
+        for s in ("사람인", "잡코리아", "임팩트커리어"))
 
     page = TEMPLATE.format(
         date_label=f"{today.year}년 {today.month}월 {today.day}일 ({WEEK[today.weekday()]})",
@@ -293,7 +293,7 @@ footer {{ font-size: 12px; color: var(--muted); }}
     </ul>
     <p class="empty" id="empty" hidden>이 조건에 맞는 공고가 없어요.</p>
   </details>
-  <footer>오늘 모은 공고 {total}개 ({site_stats}) 중 직무 관련도가 낮은 {low_count}개는 뺐어요. 사람인 · 원티드 · 잡코리아 · 임팩트커리어의 공개 검색 결과에서 설정한 지역·경력 조건에 맞는 공고만 모았어요. 마감일과 세부 조건은 공고 원문에서 꼭 확인하세요. 숨긴 공고는 이 기기의 브라우저에만 저장돼요.</footer>
+  <footer>오늘 모은 공고 {total}개 ({site_stats}) 중 직무 관련도가 낮은 {low_count}개는 뺐어요. 사람인 · 잡코리아 · 임팩트커리어의 공개 검색 결과에서 설정한 지역·경력 조건에 맞는 공고만 모았어요. 마감일과 세부 조건은 공고 원문에서 꼭 확인하세요. 숨긴 공고는 이 기기의 브라우저에만 저장돼요. 원티드 공고는 원티드 앱의 알림으로 확인하세요.</footer>
 </div>
 <script>
 (function () {{

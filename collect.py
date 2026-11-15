@@ -300,7 +300,7 @@ def fill_posted_dates(rows, errors):
 
 def main():
     all_rows, errors = [], []
-    for name, fn in (("원티드", wanted), ("임팩트커리어", impactcareer)):
+    for name, fn in (("임팩트커리어", impactcareer),):  # 원티드는 GitHub(해외 서버) 접속을 막아서 뺐다
         try:
             all_rows += fn()
         except Exception as e:  # noqa: BLE001
@@ -352,7 +352,6 @@ def main():
     by = {}
     for r in uniq.values():
         by[r["site"]] = by.get(r["site"], 0) + 1
-    print("원티드 접속 기록:", WANTED_LOG[:4])
     print(json.dumps({"date": today, "total": len(uniq), "by_site": by,
                       "new": sum(r["is_new"] for r in uniq.values()), "errors": errors}, ensure_ascii=False))
 
