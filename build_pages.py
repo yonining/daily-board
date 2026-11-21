@@ -61,6 +61,8 @@ def main():
         return (today - date.fromisoformat(j.get("posted") or d["date"])).days <= OLD_DAYS
 
     def group_of(j):
+        if j.get("main"):
+            return j["main"]
         dirs = j.get("direction", "A")
         if "C" in dirs:
             return "C"
@@ -72,7 +74,12 @@ def main():
 
     cand = [j for j in d["jobs"] if j["score"] >= PICK_SCORE and fresh_enough(j)]
     cand.sort(key=lambda j: (not j["is_new"], -j["score"], -int((j.get("posted") or "0").replace("-", ""))))
-    chosen = cand[:MAX_PICKS]
+    # 방향마다 최소 2개는 추천에 들어가게 먼저 담고, 남은 자리는 점수 순으로 채운다
+    chosen = []
+    for g in ("C", "A", "B"):
+        chosen += [j for j in cand if group_of(j) == g][:2]
+    chosen += [j for j in cand if j not in chosen][:MAX_PICKS - len(chosen)]
+    chosen.sort(key=lambda j: cand.index(j))
     p = {"picks": [{"id": j["id"], "direction": group_of(j)} for j in chosen]}
     new_today = sum(1 for j in d["jobs"] if j["is_new"] and j["score"] >= MIN_SCORE)
     plant = sum(1 for j in chosen if group_of(j) == "C")

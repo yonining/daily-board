@@ -35,13 +35,16 @@ MINUS = [
 def score(r):
     t = f"{r['title']} {r.get('sector','')}"
     s, dirs = 0, set()
+    weight = {"A": 0, "B": 0, "C": 0}  # 방향별 근거 점수 (제목은 2배로 친다) → 대표 방향을 고른다
     for pat, pts, d in STRONG:
         if re.search(pat, r["title"], re.I):
             s += pts
             dirs.add(d)
+            weight[d] += pts * 2
         elif re.search(pat, r.get("sector", ""), re.I):
             s += pts // 2
             dirs.add(d)
+            weight[d] += pts // 2
     if re.search(CONTEXT_PLUS, t, re.I):
         s += 1
     for pat, pts in MINUS:
@@ -50,6 +53,7 @@ def score(r):
     if r.get("site") == "잡알리오":  # 공공기관: 제목이 '제3차 직원 채용'처럼 뭉뚱그려져 있어 제목 감점 대신 가산
         s += 3 + (2 if re.search(DESIGN_WORD, r["title"], re.I) else 0)
         dirs.add("B")
+        weight["B"] += 3
     elif not re.search(DESIGN_WORD, r["title"], re.I):
         s -= 4
     if "C" not in dirs and re.search(PLANT_COMPANY, r.get("company", ""), re.I):  # 회사가 식물 관련
@@ -58,11 +62,19 @@ def score(r):
     if r.get("site") == "임팩트커리어":  # 소셜섹터 전문 사이트라 방향 B에 가산
         s += 3
         dirs.add("B")
+        weight["B"] += 3
     exp = r.get("experience", "").replace(" ", "")
     m = re.search(r"(\d+)~(\d+)년", exp)
     if m and int(m.group(1)) in (2, 3, 4, 5):
         s += 1
-    return s, "".join(sorted(dirs)) or "A"
+    # 대표 방향: 식물 단서가 있으면 C, 아니면 근거 점수가 큰 쪽 (같으면 B, 정보·편집 쪽이 더 드물어서)
+    if "C" in dirs:
+        main = "C"
+    elif dirs:
+        main = max(sorted(dirs, reverse=True), key=lambda d: weight[d])
+    else:
+        main = "A"
+    return s, "".join(sorted(dirs)) or "A", main
 
 
 def _norm(t):
@@ -91,7 +103,7 @@ def dedupe(jobs):
 def main():
     d = json.loads((DATA / "today.json").read_text())
     for r in d["jobs"]:
-        r["score"], r["direction"] = score(r)
+        r["score"], r["direction"], r["main"] = score(r)
     d["jobs"].sort(key=lambda r: (-r["score"], not r["is_new"]))
     before = len(d["jobs"])
     d["jobs"] = dedupe(d["jobs"])
