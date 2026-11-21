@@ -390,7 +390,10 @@ def fill_posted_dates(rows, errors):
 
 def main():
     all_rows, errors = [], []
-    for name, fn in (("임팩트커리어", impactcareer), ("잡알리오", jobalio)):  # 원티드는 GitHub(해외 서버) 접속을 막아서 뺐다
+    sources = [("임팩트커리어", impactcareer)]
+    if os.environ.get("ALIO_KEY", "").strip():  # 잡알리오는 인증키를 넣었을 때만 켜진다 (지금은 꺼 둠)
+        sources.append(("잡알리오", jobalio))
+    for name, fn in sources:  # 원티드는 GitHub(해외 서버) 접속을 막아서 뺐다
         try:
             all_rows += fn()
         except Exception as e:  # noqa: BLE001

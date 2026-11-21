@@ -140,13 +140,15 @@ def main():
     err_block = f'<div class="warn"><strong>오늘 일부를 가져오지 못했어요.</strong><ul>{errs}</ul></div>' if errs else ""
     site_stats = " · ".join(
         f'{s} {by_site.get(s, 0)}개'
-        for s in ("사람인", "잡코리아", "임팩트커리어", "잡알리오"))
+        for s in ("사람인", "잡코리아", "임팩트커리어", "잡알리오") if s != "잡알리오" or by_site.get(s))
 
     page = TEMPLATE.format(
         date_label=f"{today.year}년 {today.month}월 {today.day}일 ({WEEK[today.weekday()]})",
         summary=e(p.get("summary", "")), new=new_count, pick_count=len(pick_ids), site_stats=site_stats,
         err_block=err_block, sections="".join(sections), other_count=len(others), rows="".join(rows),
         new_html=new_html, new_rel_count=len(new_rel), total=len(d["jobs"]) + d.get("merged", 0), low_count=low_count,
+        alio_src="와 잡알리오(공공기관 채용)" if by_site.get("잡알리오") else "",
+        alio_note=" 공공기관 공고는 한 공고에 여러 직무가 묶여 있을 수 있어 디자인 직무가 있는지 원문에서 확인하세요." if by_site.get("잡알리오") else "",
         merged_txt=f" 같은 자리를 여러 곳에서 올린 공고 {d['merged']}개는 하나로 합쳤어요." if d.get("merged") else "",
     )
     doc = ('<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n'
@@ -301,7 +303,7 @@ footer {{ font-size: 12px; color: var(--muted); }}
     </ul>
     <p class="empty" id="empty" hidden>이 조건에 맞는 공고가 없어요.</p>
   </details>
-  <footer>오늘 모은 공고 {total}개 ({site_stats}) 중 직무 관련도가 낮은 {low_count}개는 뺐어요.{merged_txt} 사람인 · 잡코리아 · 임팩트커리어의 공개 검색 결과와 잡알리오(공공기관 채용)에서 설정한 지역·경력 조건에 맞는 공고만 모았어요. 마감일과 세부 조건은 공고 원문에서 꼭 확인하세요. 공공기관 공고는 한 공고에 여러 직무가 묶여 있을 수 있어 디자인 직무가 있는지 원문에서 확인하세요. 숨긴 공고는 이 기기의 브라우저에만 저장돼요. 원티드 공고는 원티드 앱의 알림으로 확인하세요.</footer>
+  <footer>오늘 모은 공고 {total}개 ({site_stats}) 중 직무 관련도가 낮은 {low_count}개는 뺐어요.{merged_txt} 사람인 · 잡코리아 · 임팩트커리어의 공개 검색 결과{alio_src}에서 설정한 지역·경력 조건에 맞는 공고만 모았어요. 마감일과 세부 조건은 공고 원문에서 꼭 확인하세요.{alio_note} 숨긴 공고는 이 기기의 브라우저에만 저장돼요. 원티드와 공공기관(잡알리오) 공고는 각 앱의 알림으로 확인하세요.</footer>
 </div>
 <script>
 (function () {{

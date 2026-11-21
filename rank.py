@@ -47,7 +47,10 @@ def score(r):
     for pat, pts in MINUS:
         if re.search(pat, r["title"], re.I):
             s += pts
-    if not re.search(DESIGN_WORD, r["title"], re.I):
+    if r.get("site") == "잡알리오":  # 공공기관: 제목이 '제3차 직원 채용'처럼 뭉뚱그려져 있어 제목 감점 대신 가산
+        s += 3 + (2 if re.search(DESIGN_WORD, r["title"], re.I) else 0)
+        dirs.add("B")
+    elif not re.search(DESIGN_WORD, r["title"], re.I):
         s -= 4
     if "C" not in dirs:
         if re.search(PLANT_COMPANY, r.get("company", ""), re.I):  # 회사가 식물 관련
