@@ -16,12 +16,12 @@ PICK_SCORE = 5    # 추천에 넣을 최소 점수
 OLD_DAYS = 30     # 지난 공고는 최근 30일 안에 올라온 것만
 
 e = lambda s: html.escape(str(s or ""), quote=True)  # noqa: E731
-DIR_NAME = {"A": "앱 그래픽 · BX · 캐릭터", "B": "정보 · 편집 · 사회적 가치"}
+DIR_NAME = {"C": "식물 · 정원", "A": "앱 그래픽 · BX · 캐릭터", "B": "정보 · 편집 · 사회적 가치"}
 WEEK = "월화수목금토일"
 
 
 def chip_site(site):
-    cls = {"원티드": "wt", "사람인": "sr", "잡코리아": "jk", "임팩트커리어": "ic"}.get(site, "")
+    cls = {"원티드": "wt", "사람인": "sr", "잡코리아": "jk", "임팩트커리어": "ic", "잡알리오": "ja"}.get(site, "")
     return f'<span class="site {cls}">{e(site)}</span>'
 
 
@@ -62,6 +62,8 @@ def main():
 
     def group_of(j):
         dirs = j.get("direction", "A")
+        if "C" in dirs:
+            return "C"
         if dirs == "B" or j["site"] == "임팩트커리어":
             return "B"
         if dirs == "AB" and len(j.get("tags_B", [])) > len(j.get("tags_A", [])):
@@ -73,8 +75,10 @@ def main():
     chosen = cand[:MAX_PICKS]
     p = {"picks": [{"id": j["id"], "direction": group_of(j)} for j in chosen]}
     new_today = sum(1 for j in d["jobs"] if j["is_new"] and j["score"] >= MIN_SCORE)
-    p["summary"] = (f"오늘 새로 올라온 관련 공고는 {new_today}개예요. 점수가 높은 공고 {len(chosen)}개를 추천으로 골랐고, "
-                    "관심 없는 공고는 ×로 숨기면 이 기기에서는 다시 보이지 않아요.")
+    plant = sum(1 for j in chosen if group_of(j) == "C")
+    plant_txt = f"식물·정원 관련 공고 {plant}개도 들어 있어요. " if plant else ""
+    p["summary"] = (f"오늘 새로 올라온 관련 공고는 {new_today}개예요. 점수가 높은 공고 {len(chosen)}개를 추천으로 골랐어요. "
+                    f"{plant_txt}관심 없는 공고는 ×로 숨기면 이 기기에서는 다시 보이지 않아요.")
     by_site = {}
     for j in d["jobs"]:
         by_site[j["site"]] = by_site.get(j["site"], 0) + 1
@@ -82,7 +86,7 @@ def main():
 
     pick_ids, missing = set(), []
     sections = []
-    for key in ("A", "B"):
+    for key in ("C", "A", "B"):
         cards = []
         for pk in p["picks"]:
             if pk["direction"] != key:
@@ -136,13 +140,14 @@ def main():
     err_block = f'<div class="warn"><strong>오늘 일부를 가져오지 못했어요.</strong><ul>{errs}</ul></div>' if errs else ""
     site_stats = " · ".join(
         f'{s} {by_site.get(s, 0)}개'
-        for s in ("사람인", "잡코리아", "임팩트커리어"))
+        for s in ("사람인", "잡코리아", "임팩트커리어", "잡알리오"))
 
     page = TEMPLATE.format(
         date_label=f"{today.year}년 {today.month}월 {today.day}일 ({WEEK[today.weekday()]})",
         summary=e(p.get("summary", "")), new=new_count, pick_count=len(pick_ids), site_stats=site_stats,
         err_block=err_block, sections="".join(sections), other_count=len(others), rows="".join(rows),
-        new_html=new_html, new_rel_count=len(new_rel), total=len(d["jobs"]), low_count=low_count,
+        new_html=new_html, new_rel_count=len(new_rel), total=len(d["jobs"]) + d.get("merged", 0), low_count=low_count,
+        merged_txt=f" 같은 자리를 여러 곳에서 올린 공고 {d['merged']}개는 하나로 합쳤어요." if d.get("merged") else "",
     )
     doc = ('<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n'
            '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'
@@ -158,7 +163,7 @@ TEMPLATE = """<title>디자이너 공고 브리핑</title>
 /* Layout: one reading column — daily summary strip, curated picks by direction, then a filterable full list */
 :root {{
   --bg: #F3F5F8; --surface: #FFFFFF; --ink: #17202E; --muted: #5B6677; --line: #DCE1E9;
-  --a: #2F55D4; --a-soft: #E6ECFC; --b: #11806A; --b-soft: #DDF2EC;
+  --a: #2F55D4; --a-soft: #E6ECFC; --b: #11806A; --b-soft: #DDF2EC; --c: #4D7A16; --c-soft: #EBF3DA;
   --hi: #11806A; --mid: #8A6A12; --mid-soft: #FBF1D6; --low: #5B6677; --low-soft: #ECEFF4;
   --new: #C2410C; --warn-bg: #FFF4E5;
   --wt: #3366FF; --sr: #2F6FE4; --jk: #00A0E9; --ic: #C2410C;
@@ -167,12 +172,12 @@ TEMPLATE = """<title>디자이너 공고 브리핑</title>
 }}
 @media (prefers-color-scheme: dark) {{ :root:not([data-theme="light"]) {{
   --bg: #0F141C; --surface: #171E29; --ink: #E7ECF3; --muted: #9AA5B5; --line: #2A3342;
-  --a: #8AA4FF; --a-soft: #1F2A4A; --b: #5CCFB2; --b-soft: #163A33;
+  --a: #8AA4FF; --a-soft: #1F2A4A; --b: #5CCFB2; --b-soft: #163A33; --c: #A9D46A; --c-soft: #27341A;
   --hi: #5CCFB2; --mid: #E6C463; --mid-soft: #3A3218; --low: #9AA5B5; --low-soft: #242C38;
   --new: #FB923C; --warn-bg: #3A2A14; --wt: #8AA4FF; --sr: #8AB4FF; --jk: #5CCBFF; --ic: #FB923C; color-scheme: dark; }} }}
 :root[data-theme="dark"] {{
   --bg: #0F141C; --surface: #171E29; --ink: #E7ECF3; --muted: #9AA5B5; --line: #2A3342;
-  --a: #8AA4FF; --a-soft: #1F2A4A; --b: #5CCFB2; --b-soft: #163A33;
+  --a: #8AA4FF; --a-soft: #1F2A4A; --b: #5CCFB2; --b-soft: #163A33; --c: #A9D46A; --c-soft: #27341A;
   --hi: #5CCFB2; --mid: #E6C463; --mid-soft: #3A3218; --low: #9AA5B5; --low-soft: #242C38;
   --new: #FB923C; --warn-bg: #3A2A14; --wt: #8AA4FF; --sr: #8AB4FF; --jk: #5CCBFF; --ic: #FB923C; color-scheme: dark; }}
 [hidden] {{ display: none !important; }}
@@ -199,6 +204,7 @@ h2 .count {{ font-family: var(--mono); font-size: 13px; color: var(--muted); fon
 .dir.sm {{ width: 18px; height: 18px; font-size: 11px; border-radius: 5px; }}
 .dir-A {{ background: var(--a-soft); color: var(--a); }}
 .dir-B {{ background: var(--b-soft); color: var(--b); }}
+.dir-C {{ background: var(--c-soft); color: var(--c); }}
 .picks {{ display: flex; flex-direction: column; gap: 10px; }}
 .pick {{ background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }}
 .pick-top, .row-top {{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }}
@@ -209,7 +215,7 @@ a:focus-visible, button:focus-visible {{ outline: 2px solid var(--a); outline-of
 .meta {{ margin: 0; font-size: 13px; color: var(--muted); }}
 .why {{ margin: 6px 0 0; font-size: 14px; }}
 .site {{ font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }}
-.site.wt {{ color: var(--wt); }} .site.sr {{ color: var(--sr); }} .site.jk {{ color: var(--jk); }} .site.ic {{ color: var(--ic); }}
+.site.wt {{ color: var(--wt); }} .site.sr {{ color: var(--sr); }} .site.jk {{ color: var(--jk); }} .site.ic {{ color: var(--ic); }} .site.ja {{ color: var(--b); }}
 .fit {{ font-size: 12px; padding: 1px 8px; border-radius: 999px; }}
 .fit.hi {{ background: var(--b-soft); color: var(--hi); }}
 .fit.mid {{ background: var(--mid-soft); color: var(--mid); }}
@@ -284,6 +290,7 @@ footer {{ font-size: 12px; color: var(--muted); }}
         <button type="button" id="f-all" data-f="all" aria-pressed="true">전체</button>
         <button type="button" id="f-A" data-f="A" aria-pressed="false">A 앱·BX·캐릭터</button>
         <button type="button" id="f-B" data-f="B" aria-pressed="false">B 정보·편집·사회</button>
+        <button type="button" id="f-C" data-f="C" aria-pressed="false">C 식물·정원</button>
       </div>
       <div class="filters" role="group" aria-label="정렬">
         <button type="button" id="s-fit" data-s="fit" aria-pressed="true">추천순</button>
@@ -294,7 +301,7 @@ footer {{ font-size: 12px; color: var(--muted); }}
     </ul>
     <p class="empty" id="empty" hidden>이 조건에 맞는 공고가 없어요.</p>
   </details>
-  <footer>오늘 모은 공고 {total}개 ({site_stats}) 중 직무 관련도가 낮은 {low_count}개는 뺐어요. 사람인 · 잡코리아 · 임팩트커리어의 공개 검색 결과에서 설정한 지역·경력 조건에 맞는 공고만 모았어요. 마감일과 세부 조건은 공고 원문에서 꼭 확인하세요. 숨긴 공고는 이 기기의 브라우저에만 저장돼요. 원티드 공고는 원티드 앱의 알림으로 확인하세요.</footer>
+  <footer>오늘 모은 공고 {total}개 ({site_stats}) 중 직무 관련도가 낮은 {low_count}개는 뺐어요.{merged_txt} 사람인 · 잡코리아 · 임팩트커리어의 공개 검색 결과와 잡알리오(공공기관 채용)에서 설정한 지역·경력 조건에 맞는 공고만 모았어요. 마감일과 세부 조건은 공고 원문에서 꼭 확인하세요. 공공기관 공고는 한 공고에 여러 직무가 묶여 있을 수 있어 디자인 직무가 있는지 원문에서 확인하세요. 숨긴 공고는 이 기기의 브라우저에만 저장돼요. 원티드 공고는 원티드 앱의 알림으로 확인하세요.</footer>
 </div>
 <script>
 (function () {{
@@ -306,7 +313,7 @@ footer {{ font-size: 12px; color: var(--muted); }}
     try {{ if (get) return JSON.parse(localStorage.getItem(get) || 'null'); localStorage.setItem(val[0], JSON.stringify(val[1])); }} catch (e) {{ return null; }}
   }}
   var saved = ls('jobView') || {{}};
-  if (['all', 'A', 'B'].indexOf(saved.filter) >= 0) filter = saved.filter;
+  if (['all', 'A', 'B', 'C'].indexOf(saved.filter) >= 0) filter = saved.filter;
   if (saved.sort) sort = saved.sort;
   (ls('hiddenLocal') || []).forEach(function (h) {{ hidden.set(h.id, h); }});
 

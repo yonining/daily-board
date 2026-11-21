@@ -11,12 +11,17 @@ DATA = Path(__file__).resolve().parent / "data"
 STRONG = [  # (패턴, 점수, 방향)
     (r"캐릭터", 4, "A"), (r"일러스트", 4, "A"), (r"이모티콘", 4, "A"), (r"\bBX\b|BX", 4, "A"),
     (r"브랜드\s*디자이너|브랜드\s*디자인|브랜딩", 3, "A"), (r"그래픽", 3, "A"), (r"아이콘", 3, "A"),
+    (r"비주얼\s*디자이너|비주얼\s*디자인|시각\s*디자이너|시각\s*디자인", 3, "A"),
     (r"콘텐츠\s*디자이너|컨텐츠\s*디자이너", 2, "A"), (r"마케팅\s*디자이너|프로모션", 1, "A"),
     (r"인포그래픽", 5, "B"), (r"정보\s*디자인|쉬운\s*정보|접근성", 5, "B"),
     (r"편집\s*디자이너|편집디자인|출판|북\s*디자인", 3, "B"),
     (r"교육|에듀|아동|어린이|청소년", 2, "B"),
     (r"공공|재단|협회|사회적|비영리|NGO|복지|장애", 3, "B"),
+    (r"식물|정원|가드닝|가든|플랜트|원예|화훼|꽃|수목원|식물원|보태니컬|조경", 5, "C"),
 ]
+# 제목에 디자인 일이라는 단서가 하나도 없으면 크게 깎는다 (예: '출판 개발', '교재 기획')
+DESIGN_WORD = r"디자인|디자이너|일러스트|그래픽|BX|BI|브랜딩|캐릭터|이모티콘|아트워크|인포그래픽|비주얼|Designer|Design|Illustrat"
+PLANT_COMPANY = r"꾸까|kukka|수목원|식물원|수목정원|가든|garden|플랜트|plant|원예|화훼|농원|보태니컬|botanic"
 CONTEXT_PLUS = r"앱|App|플랫폼|IT|서비스|스타트업|테크|커플|라이프"
 MINUS = [
     (r"마케터|크리에이터|PD\b|에디터", -4), (r"아티스트|원화|컨셉\s*아트|3D|모델러", -3),
@@ -42,6 +47,15 @@ def score(r):
     for pat, pts in MINUS:
         if re.search(pat, r["title"], re.I):
             s += pts
+    if not re.search(DESIGN_WORD, r["title"], re.I):
+        s -= 4
+    if "C" not in dirs:
+        if re.search(PLANT_COMPANY, r.get("company", ""), re.I):  # 회사가 식물 관련
+            s += 4
+            dirs.add("C")
+        elif "C" in r.get("groups", []):  # 식물 검색어로 찾은 공고 (본문·회사 소개에 식물 단어)
+            s += 3
+            dirs.add("C")
     if r.get("site") == "임팩트커리어":  # 소셜섹터 전문 사이트라 방향 B에 가산
         s += 3
         dirs.add("B")
@@ -52,11 +66,37 @@ def score(r):
     return s, "".join(sorted(dirs)) or "A"
 
 
+def _norm(t):
+    t = re.sub(r"\[[^\]]*\]|\([^)]*(주|株)[^)]*\)|㈜", "", t)
+    t = re.sub(r"채용|모집|담당자|구인|정규직|계약직|경력직?|신입|급구|\d+명", "", t)
+    return re.sub(r"[^0-9A-Za-z가-힣]", "", t).lower()
+
+
+def dedupe(jobs):
+    """같은 자리를 여러 회사·사이트가 올린 공고를 하나로 합친다 (점수가 높은 쪽만 남김).
+
+    제목이 짧고 흔하면('그래픽디자이너') 다른 회사 공고일 수 있으니, 그때는 회사 이름도 같아야 합친다.
+    """
+    keep, seen = [], set()
+    for r in jobs:
+        t = _norm(r["title"])
+        c = _norm(r.get("company", ""))
+        key = ("t", t) if len(t) >= 12 else ("tc", t, c)
+        if key in seen:
+            continue
+        seen.add(key)
+        keep.append(r)
+    return keep
+
+
 def main():
     d = json.loads((DATA / "today.json").read_text())
     for r in d["jobs"]:
         r["score"], r["direction"] = score(r)
     d["jobs"].sort(key=lambda r: (-r["score"], not r["is_new"]))
+    before = len(d["jobs"])
+    d["jobs"] = dedupe(d["jobs"])
+    d["merged"] = before - len(d["jobs"])
     (DATA / "ranked.json").write_text(json.dumps(d, ensure_ascii=False, indent=1))
     for i, r in enumerate(d["jobs"][:90]):
         print(i, r["score"], r["direction"], r["site"][:2], "|", r["id"], "|", r["company"][:16], "|",

@@ -1,9 +1,10 @@
-"""사람인·원티드·잡코리아에서 디자이너 공고를 모아 1차로 거른 뒤 JSON으로 저장한다.
+"""사람인·잡코리아·임팩트커리어에서 디자이너 공고를 모아 1차로 거른 뒤 JSON으로 저장한다.
 
 사용: python3 -I collect.py  →  data/today.json (새 공고 표시 포함), data/seen.json 갱신
 """
 import html
 import json
+import os
 import re
 import sys
 import time
@@ -18,22 +19,27 @@ DATA.mkdir(exist_ok=True)
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/130 Safari/537.36")
 
-# 방향 A: 앱 그래픽·BX·캐릭터 / 방향 B: 정보·편집·사회적 가치
+# 방향 A: 앱 그래픽·BX·캐릭터 / 방향 B: 정보·편집·사회적 가치 / 방향 C: 식물·정원
+# C는 검색어에 식물 관련 단어가 들어간 공고만 모은다. 제목에 '디자인' 계열 단어가 없으면 이후에 걸러진다.
 KEYWORDS = {
     "A": ["그래픽디자이너", "BX디자이너", "브랜드디자이너", "캐릭터디자이너",
-          "일러스트레이터", "콘텐츠디자이너", "마케팅디자이너"],
+          "일러스트레이터", "콘텐츠디자이너", "마케팅디자이너", "비주얼디자이너", "시각디자이너"],
     "B": ["편집디자이너", "인포그래픽", "정보디자인", "교육콘텐츠 디자이너",
-          "사회적기업 디자이너"],
+          "사회적기업 디자이너", "출판디자이너", "북디자이너"],
+    "C": ["식물 디자이너", "가드닝", "원예", "화훼", "플랜트 디자이너", "수목원", "정원디자인", "꽃 브랜드"],
 }
+# 회사 이름만 봐도 식물 관련인 곳 (공고 제목에 식물 단어가 없어도 C로 표시). 아는 곳이 생기면 여기에 더한다.
+PLANT_COMPANY = re.compile(r"꾸까|kukka|수목원|식물원|수목정원|가든|garden|플랜트|plant|원예|화훼|농원|보태니컬|botanic", re.I)
 REGIONS = ("서울", "경기", "대전")
 TITLE_HINT = re.compile(r"디자인|디자이너|일러스트|그래픽|BX|브랜드|캐릭터|콘텐츠|편집|인포그래픽|Designer|Design", re.I)
 EXCLUDE = re.compile(
-    r"인테리어|실내|건축|조경|패션|의류|가구|제품디자인|산업디자인|CAD|텍스타일|주얼리|쥬얼리|"
+    r"인테리어|실내|건축|패션|의류|가구|제품디자인|산업디자인|CAD|텍스타일|주얼리|쥬얼리|"
     r"퍼블리셔|개발자|엔지니어|헤어|네일|메이크업|공간디자인|VMD|조명|자동차|기구설계|3D 모델러|"
-    r"UX 리서처|프론트엔드|영업|MD$|웨딩|꽃|플로리스트", re.I)
+    r"UX 리서처|프론트엔드|영업|MD$|웨딩|플로리스트|조경\s*(설계|기사|시공|현장|공무)", re.I)
 BONUS = {
-    "A": ["캐릭터", "아이콘", "앱", "브랜드", "BX", "일러스트", "이모티콘", "굿즈", "프로모션", "콘텐츠", "마케팅", "그래픽"],
+    "A": ["캐릭터", "아이콘", "앱", "브랜드", "BX", "비주얼", "시각", "일러스트", "이모티콘", "굿즈", "프로모션", "콘텐츠", "마케팅", "그래픽"],
     "B": ["인포그래픽", "정보", "편집", "출판", "교육", "공공", "사회적", "비영리", "재단", "쉬운", "접근성", "아동", "청소년"],
+    "C": ["식물", "정원", "가드닝", "가든", "플랜트", "원예", "화훼", "꽃", "수목원", "식물원", "보태니컬", "조경"],
 }
 
 
@@ -257,6 +263,90 @@ def impactcareer():
     return out
 
 
+# ---------------- 잡알리오 (공공기관 채용, 공공데이터포털 오픈API) ----------------
+ALIO_URL = "https://apis.data.go.kr/1051000/recruitment/list"
+
+
+def _alio_items(d):
+    """응답 모양이 조금씩 달라도 공고 목록을 찾아낸다."""
+    if isinstance(d, list):
+        return d
+    if isinstance(d, dict):
+        for k in ("result", "items", "item", "data", "list", "body", "response"):
+            if k in d:
+                got = _alio_items(d[k])
+                if got:
+                    return got
+    return []
+
+
+def _alio_pick(j, *keys):
+    for k in keys:
+        v = j.get(k)
+        if v not in (None, ""):
+            return str(v).strip()
+    return ""
+
+
+def _ymd(v):
+    v = re.sub(r"\D", "", v or "")
+    return date(int(v[:4]), int(v[4:6]), int(v[6:8])) if len(v) >= 8 else None
+
+
+def jobalio():
+    """디자인 직무가 들어간 진행 중 공공기관 공고. 인증키는 GitHub 저장소 Secrets의 ALIO_KEY에 넣는다."""
+    key = os.environ.get("ALIO_KEY", "").strip()
+    if not key:
+        raise RuntimeError("인증키(ALIO_KEY)를 아직 넣지 않아 건너뛰었어요.")
+    today = date.today()
+    out = []
+    for page in range(1, 16):
+        q = urllib.parse.urlencode({"serviceKey": key, "resultType": "json", "numOfRows": 100,
+                                    "pageNo": page, "ongoingYn": "Y"}, safe="")
+        raw = get(f"{ALIO_URL}?{q}")
+        try:
+            d = json.loads(raw)
+        except ValueError:
+            msg = re.search(r"<returnAuthMsg>([^<]+)|<errMsg>([^<]+)", raw)
+            raise RuntimeError("응답을 읽지 못했어요" + (f" ({msg.group(1) or msg.group(2)})" if msg else ""))
+        rows = _alio_items(d)
+        for j in rows:
+            if not isinstance(j, dict):
+                continue
+            ncs = _alio_pick(j, "ncsCdNmLst", "ncsNm", "ncsCdLst")
+            title = _alio_pick(j, "recrutPbancTtl", "pbancTtl", "title")
+            if "디자인" not in ncs and not TITLE_HINT.search(title):
+                continue
+            rgn = _alio_pick(j, "workRgnNmLst", "workRgnLst")
+            if not any(r in rgn for r in REGIONS):
+                continue
+            end = _ymd(_alio_pick(j, "pbancEndYmd", "endYmd", "rceptEndYmd"))
+            if end and end < today:
+                continue
+            beg = _ymd(_alio_pick(j, "pbancBgngYmd", "bgngYmd", "rceptBgngYmd"))
+            sn = _alio_pick(j, "recrutPblntSn", "pblntSn", "sn")
+            if not sn:
+                continue
+            se, hire = _alio_pick(j, "recrutSeNm", "recrutSe"), _alio_pick(j, "hireTypeNmLst", "hireTypeLst")
+            out.append({
+                "site": "잡알리오", "id": f"a{sn}", "title": title,
+                "company": _alio_pick(j, "instNm", "pblntInstNm", "insttNm"),
+                "location": rgn.replace(",", " · ")[:30],
+                "experience": " · ".join(x for x in (se, hire) if x),
+                "deadline": f"{end.month}/{end.day}" if end else "",
+                "sector": f"공공기관 · {ncs}",
+                "url": _alio_pick(j, "srcUrl", "url", "pbancUrl") or f"https://job.alio.go.kr/recruitview.do?idx={sn}",
+                "query": "디자인", "group_hint": "B",
+                "posted": beg.isoformat() if beg else "", "posted_kind": "등록" if beg else "",
+                "_exp_ok": True,  # 공공기관 '신입'은 대개 경력자도 지원할 수 있어 거르지 않는다
+            })
+        total = d.get("totalCount") if isinstance(d, dict) else None
+        if len(rows) < 100 or (total and page * 100 >= int(total)):
+            break
+        time.sleep(0.3)
+    return out
+
+
 def fill_posted_dates(rows, errors):
     """공고가 올라온 날을 채운다. 원티드·잡코리아는 상세 페이지에서 한 번만 가져와 data/posted.json에 저장한다.
 
@@ -300,7 +390,7 @@ def fill_posted_dates(rows, errors):
 
 def main():
     all_rows, errors = [], []
-    for name, fn in (("임팩트커리어", impactcareer),):  # 원티드는 GitHub(해외 서버) 접속을 막아서 뺐다
+    for name, fn in (("임팩트커리어", impactcareer), ("잡알리오", jobalio)):  # 원티드는 GitHub(해외 서버) 접속을 막아서 뺐다
         try:
             all_rows += fn()
         except Exception as e:  # noqa: BLE001
@@ -317,6 +407,11 @@ def main():
                     errors.append(f"{name}({w}): {e}")
                 time.sleep(0.7)
 
+    # 같은 공고가 여러 검색어에 걸리면 어느 방향 검색어에 걸렸는지 모두 기록한다
+    hits = {}
+    for r in all_rows:
+        hits.setdefault(r["id"], set()).add(r.get("group_hint", "A"))
+
     # 1차 필터
     uniq = {}
     for r in all_rows:
@@ -325,14 +420,17 @@ def main():
         hay = f"{r['title']} {r.get('sector','')}"
         if not TITLE_HINT.search(hay) or EXCLUDE.search(r["title"]):
             continue
-        if not region_ok(r.get("location", "")):
+        if r["site"] != "잡알리오" and not region_ok(r.get("location", "")):  # 잡알리오는 수집할 때 지역을 이미 걸렀다
             continue
         ok = r.pop("_exp_ok", None)
         if ok is False or (ok is None and not exp_ok(r.get("experience", ""))):
             continue
         tg = tags_for(r["title"], r.get("sector", ""))
-        r["tags_A"], r["tags_B"] = tg["A"], tg["B"]
-        if not (tg["A"] or tg["B"]):
+        r["groups"] = sorted(hits[r["id"]])
+        if PLANT_COMPANY.search(r.get("company", "")) and "회사" not in tg["C"]:
+            tg["C"].append("회사")
+        r["tags_A"], r["tags_B"], r["tags_C"] = tg["A"], tg["B"], tg["C"]
+        if not (tg["A"] or tg["B"] or tg["C"] or "C" in r["groups"]):
             continue
         uniq[r["id"]] = r
 
