@@ -17,11 +17,11 @@ STRONG = [  # (패턴, 점수, 방향)
     (r"편집\s*디자이너|편집디자인|출판|북\s*디자인", 3, "B"),
     (r"교육|에듀|아동|어린이|청소년", 2, "B"),
     (r"공공|재단|협회|사회적|비영리|NGO|복지|장애", 3, "B"),
-    (r"식물|정원|가드닝|가든|플랜트|원예|화훼|꽃|수목원|식물원|보태니컬|조경", 5, "C"),
+    (r"식물|정원|가드닝|가든|원예|화훼|꽃|수목원|식물원|보태니컬|조경", 5, "C"),
 ]
 # 제목에 디자인 일이라는 단서가 하나도 없으면 크게 깎는다 (예: '출판 개발', '교재 기획')
 DESIGN_WORD = r"디자인|디자이너|일러스트|그래픽|BX|BI|브랜딩|캐릭터|이모티콘|아트워크|인포그래픽|비주얼|Designer|Design|Illustrat"
-PLANT_COMPANY = r"꾸까|kukka|수목원|식물원|수목정원|가든|garden|플랜트|plant|원예|화훼|농원|보태니컬|botanic"
+PLANT_COMPANY = r"꾸까|kukka|수목원|식물원|수목정원|가든|garden|원예|화훼|농원|보태니컬|botanic"
 CONTEXT_PLUS = r"앱|App|플랫폼|IT|서비스|스타트업|테크|커플|라이프"
 MINUS = [
     (r"마케터|크리에이터|PD\b|에디터", -4), (r"아티스트|원화|컨셉\s*아트|3D|모델러", -3),
@@ -52,13 +52,9 @@ def score(r):
         dirs.add("B")
     elif not re.search(DESIGN_WORD, r["title"], re.I):
         s -= 4
-    if "C" not in dirs:
-        if re.search(PLANT_COMPANY, r.get("company", ""), re.I):  # 회사가 식물 관련
-            s += 4
-            dirs.add("C")
-        elif "C" in r.get("groups", []):  # 식물 검색어로 찾은 공고 (본문·회사 소개에 식물 단어)
-            s += 3
-            dirs.add("C")
+    if "C" not in dirs and re.search(PLANT_COMPANY, r.get("company", ""), re.I):  # 회사가 식물 관련
+        s += 4
+        dirs.add("C")
     if r.get("site") == "임팩트커리어":  # 소셜섹터 전문 사이트라 방향 B에 가산
         s += 3
         dirs.add("B")
